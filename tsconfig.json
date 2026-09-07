@@ -7,5 +7,6 @@
     "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "types": ["vitest/globals"]
+  "types": ["vitest/globals"],
+  "include": ["index.ts", "tests/**/*.ts", "types/**/*.d.ts"]
 }
