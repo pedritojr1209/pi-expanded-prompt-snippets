@@ -1,0 +1,227 @@
+/// <reference types="vitest/globals" />
+
+import { describe, it, expect, vi } from "vitest";
+import { existsSync, mkdirSync, rmSync, writeFileSync, renameSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const extensionDir = dirname(fileURLToPath(import.meta.url));
+const realSnippetsDir = join(extensionDir, "..", "snippets");
+
+vi.mock("@earendil-works/pi-coding-agent", () => ({
+	ExtensionAPI: {},
+	ExtensionContext: {},
+}));
+
+vi.mock("@earendil-works/pi-tui", () => ({
+	Key: {
+		up: "up",
+		down: "down",
+		left: "left",
+		right: "right",
+		space: " ",
+		tab: "tab",
+		enter: "enter",
+		escape: "escape",
+	},
+	matchesKey: (data: string, key: string) => data === key,
+	truncateToWidth: (text: string, width: number) => (text.length <= width ? text : text.slice(0, width)),
+	wrapTextWithAnsi: (text: string, width: number) => {
+		const lines: string[] = [];
+		let remaining = text;
+		while (remaining.length > width) {
+			lines.push(remaining.slice(0, width));
+			remaining = remaining.slice(width);
+		}
+		if (remaining.length > 0) lines.push(remaining);
+		return lines.length > 0 ? lines : [""];
+	},
+}));
+
+describe("extension integration", () => {
+	const registeredShortcuts: Record<string, { description: string; handler: (ctx: any) => void }> = {};
+	const registeredCommands: Record<string, { description: string; handler: (args: any, ctx: any) => void }> = {};
+	const eventHandlers: any = {};
+	const widgetLines: string[][] = [];
+	const notifications: string[] = [];
+
+	const makePi = () => ({
+		on: vi.fn((event: string, handler: (event: any, ctx: any) => void) => {
+			if (!eventHandlers[event]) eventHandlers[event] = [];
+			eventHandlers[event].push(handler);
+		}),
+		registerShortcut: vi.fn((key: string, config: { description: string; handler: (ctx: any) => void }) => {
+			registeredShortcuts[key] = config;
+		}),
+		registerCommand: vi.fn((name: string, config: { description: string; handler: (args: any, ctx: any) => void }) => {
+			registeredCommands[name] = config;
+		}),
+	});
+
+	const makeCtx = () => ({
+		hasUI: true,
+		mode: "tui",
+		ui: {
+			setWidget: (_id: string, lines?: string[]) => {
+				widgetLines.push(lines ?? []);
+			},
+			notify: (message: string) => {
+				notifications.push(message);
+			},
+			custom: vi.fn(),
+			theme: {
+				fg: (_color: string, text: string) => text,
+				dim: (text: string) => text,
+				bold: (text: string) => text,
+				accent: (text: string) => text,
+				warning: (text: string) => text,
+				success: (text: string) => text,
+			},
+		},
+	});
+
+	it("registers the snippets shortcut", async () => {
+		vi.resetModules();
+		const mod = await import("../index.js");
+		const pi = makePi();
+		mod.default(pi as any);
+		expect(registeredShortcuts["alt+s"]).toBeDefined();
+		expect(registeredShortcuts["alt+s"].description).toBe("Toggle prompt snippets");
+	});
+
+	it("registers the snippets command", async () => {
+		vi.resetModules();
+		const mod = await import("../index.js");
+		const pi = makePi();
+		mod.default(pi as any);
+		expect(registeredCommands["snippets"]).toBeDefined();
+		expect(registeredCommands["snippets"].description).toBe("Open the prompt snippet toggle menu");
+	});
+
+	it("registers session_start and input lifecycle hooks", async () => {
+		vi.resetModules();
+		const mod = await import("../index.js");
+		const pi = makePi();
+		mod.default(pi as any);
+		expect(pi.on).toHaveBeenCalledWith("session_start", expect.any(Function));
+		expect(pi.on).toHaveBeenCalledWith("input", expect.any(Function));
+	});
+
+	it("runs full input transformation pipeline", async () => {
+		const testDir = join(extensionDir, ".tmp-integration-test");
+		if (existsSync(testDir)) rmSync(testDir, { recursive: true });
+		mkdirSync(testDir, { recursive: true });
+		mkdirSync(join(testDir, "rules"), { recursive: true });
+		writeFileSync(
+			join(testDir, "rules", "style.md"),
+			`---
+name: Style Guide
+placement: prepend
+order: 1
+main: true
+---
+Use clear language.`,
+		);
+		writeFileSync(
+			join(testDir, "rules", "extra.md"),
+			`---
+name: Extra Notes
+placement: prepend
+order: 2
+---
+Additional context.`,
+		);
+
+		const backupDir = join(extensionDir, "..", "snippets-backup");
+		let useTestDir = false;
+
+		if (existsSync(realSnippetsDir)) {
+			if (existsSync(backupDir)) rmSync(backupDir, { recursive: true });
+			renameSync(realSnippetsDir, backupDir);
+			useTestDir = true;
+		}
+		renameSync(testDir, realSnippetsDir);
+
+		try {
+			vi.resetModules();
+			const mod = await import("../index.js");
+			const pi = makePi();
+			mod.default(pi as any);
+
+			const inputHandler = (pi.on as any).mock.calls.find((c: any[]) => c[0] === "input")?.[1];
+			expect(inputHandler).toBeDefined();
+
+			const sessionHandler = (pi.on as any).mock.calls.find((c: any[]) => c[0] === "session_start")?.[1];
+			const ctx = makeCtx();
+			await sessionHandler(null, ctx);
+
+			// Simulate user opening menu, selecting first snippet, and confirming
+			const openMenuHandler = (pi.registerShortcut as any).mock.calls.find(
+				(c: any[]) => c[0] === "alt+s",
+			)?.[1]?.handler;
+			expect(openMenuHandler).toBeDefined();
+
+			let resolvedWith = false;
+			(ctx.ui.custom as any).mockImplementation((rendererFn: any) => {
+				const tui = { requestRender: vi.fn() };
+				const theme = {
+					fg: (_c: string, t: string) => t,
+					dim: (t: string) => t,
+					bold: (t: string) => t,
+					accent: (t: string) => t,
+					warning: (t: string) => t,
+					success: (t: string) => t,
+				};
+				const keybindings = {};
+				const obj = rendererFn(tui, theme, keybindings, (result: boolean) => {
+					resolvedWith = result;
+					return result;
+				});
+
+				obj.handleInput("right");
+				obj.handleInput("down");
+				obj.handleInput(" ");
+				obj.handleInput("down");
+				obj.handleInput(" ");
+				obj.handleInput("enter");
+
+				return Promise.resolve(true);
+			});
+
+			await openMenuHandler(ctx);
+			expect(resolvedWith).toBe(true);
+
+			const result = await inputHandler({ text: "Hello world" }, ctx);
+
+			expect(result).toBeDefined();
+			expect(result.action).toBe("transform");
+			expect(result.text).toContain("Hello world");
+			expect(result.text).toContain("## Style Guide");
+			expect(result.text).toContain("* Additional context.");
+		} finally {
+			if (useTestDir && existsSync(backupDir)) {
+				if (existsSync(realSnippetsDir)) rmSync(realSnippetsDir, { recursive: true });
+				renameSync(backupDir, realSnippetsDir);
+			} else if (existsSync(realSnippetsDir)) {
+				rmSync(realSnippetsDir, { recursive: true });
+			}
+		}
+	});
+
+	it("clears enabled snippets and updates widget on session_start", async () => {
+		vi.resetModules();
+		const mod = await import("../index.js");
+		const pi = makePi();
+		mod.default(pi as any);
+
+		const sessionHandler = (pi.on as any).mock.calls.find((c: any[]) => c[0] === "session_start")?.[1];
+		const inputHandler = (pi.on as any).mock.calls.find((c: any[]) => c[0] === "input")?.[1];
+		expect(sessionHandler).toBeDefined();
+
+		const ctx = makeCtx();
+		await sessionHandler(null, ctx);
+
+		const secondInput = await inputHandler({ text: "test" }, ctx);
+		expect(secondInput).toBeUndefined();
+	});
+});
