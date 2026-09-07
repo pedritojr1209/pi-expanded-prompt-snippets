@@ -126,6 +126,22 @@ describe("buildTree", () => {
 		expect(child).toBeDefined();
 		expect(child!.mainSnippetId).toBe("parent/child/leaf");
 	});
+
+	it("resolves mainSnippetId on deeply nested subfolders", () => {
+		const snippets: Snippet[] = [
+			makeSnippet("role/agent/sub", { main: true }),
+			makeSnippet("role/agent/other"),
+			makeSnippet("role/standalone"),
+		];
+
+		const tree = buildTree(snippets);
+		const role = tree.find((n) => n.type === "folder" && n.id === "role") as FolderNode | undefined;
+		const agent = role?.children.find((n) => n.type === "folder" && n.id === "role/agent") as FolderNode | undefined;
+
+		expect(role).toBeDefined();
+		expect(agent).toBeDefined();
+		expect(agent!.mainSnippetId).toBe("role/agent/sub");
+	});
 });
 
 describe("createInitialState", () => {

@@ -95,7 +95,7 @@ function buildFolderChildren(snippets: Snippet[], parentFolder: string): TreeNod
 		if (nextSlash === -1) {
 			direct.push(snippet);
 		} else {
-			const subFolder = snippet.id.slice(0, snippet.id.length - remainder.length + nextSlash);
+			const subFolder = parentFolder + "/" + remainder.slice(0, nextSlash);
 			const existing = nestedMap.get(subFolder) ?? [];
 			existing.push(snippet);
 			nestedMap.set(subFolder, existing);

@@ -168,8 +168,8 @@ export default function (pi: ExtensionAPI) {
 							const row = visible[state.cursor];
 							if (row && row.node.type === "snippet") {
 								previewSnippet = snippets.find((s) => s.id === row.node.id) ?? null;
-							} else 							if (row && row.node.type === "folder") {
-								const folderNode = row.node as any;
+							} else if (row && row.node.type === "folder") {
+								const folderNode = row.node;
 								if (folderNode.mainSnippetId) {
 									previewSnippet = snippets.find((s) => s.id === folderNode.mainSnippetId) ?? null;
 								}
