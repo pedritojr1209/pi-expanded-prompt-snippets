@@ -15,69 +15,17 @@
  * - Toggles reset to all-off after each send and at session start.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { Snippet } from "./types/snippet.js";
 import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-
-interface Snippet {
-	/** Filename, e.g. "concise.md" */
-	id: string;
-	name: string;
-	description: string;
-	placement: "prepend" | "append";
-	order: number;
-	body: string;
-}
+import { loadSnippets } from "./src/discovery.js";
 
 const extensionDir = dirname(fileURLToPath(import.meta.url));
 const snippetsDir = join(extensionDir, "snippets");
 const WIDGET_ID = "prompt-snippets";
-
-function parseSnippet(filename: string, raw: string): Snippet | null {
-	const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-	if (!match) return null;
-
-	const meta: Record<string, string> = {};
-	for (const line of match[1].split(/\r?\n/)) {
-		const kv = line.match(/^([A-Za-z][\w-]*)\s*:\s*(.*)$/);
-		if (kv) meta[kv[1].toLowerCase()] = kv[2].trim().replace(/^["']|["']$/g, "");
-	}
-
-	const body = match[2].trim();
-	if (!body) return null;
-
-	const parsedOrder = Number.parseInt(meta.order ?? "", 10);
-	return {
-		id: filename,
-		name: meta.name || filename.replace(/\.md$/i, ""),
-		description: meta.description ?? "",
-		placement: meta.placement === "prepend" ? "prepend" : "append",
-		order: Number.isFinite(parsedOrder) ? parsedOrder : 9999,
-		body,
-	};
-}
-
-/** Load all snippets, sorted: prepend group first, append group last, each by (order, name). */
-function loadSnippets(): Snippet[] {
-	if (!existsSync(snippetsDir)) return [];
-	const snippets: Snippet[] = [];
-	for (const file of readdirSync(snippetsDir)) {
-		if (!file.toLowerCase().endsWith(".md")) continue;
-		try {
-			const snippet = parseSnippet(file, readFileSync(join(snippetsDir, file), "utf8"));
-			if (snippet) snippets.push(snippet);
-		} catch {
-			// Skip unreadable files
-		}
-	}
-	const byOrder = (a: Snippet, b: Snippet) => a.order - b.order || a.name.localeCompare(b.name);
-	return [
-		...snippets.filter((s) => s.placement === "prepend").sort(byOrder),
-		...snippets.filter((s) => s.placement === "append").sort(byOrder),
-	];
-}
 
 export default function (pi: ExtensionAPI) {
 	// Snippets last seen on disk (sorted). Refreshed whenever the menu opens or a message is sent.
@@ -113,7 +61,7 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		snippets = loadSnippets();
+		snippets = loadSnippets(snippetsDir);
 		// Drop toggles for snippets that no longer exist on disk.
 		enabled = new Set([...enabled].filter((id) => snippets.some((s) => s.id === id)));
 
@@ -286,7 +234,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("session_start", (_event, ctx) => {
 		enabled = new Set();
-		snippets = loadSnippets();
+		snippets = loadSnippets(snippetsDir);
 		if (!existsSync(snippetsDir)) mkdirSync(snippetsDir, { recursive: true });
 		updateWidget(ctx);
 	});
@@ -294,7 +242,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("input", async (event, ctx) => {
 		if (enabled.size === 0) return; // continue unchanged
 
-		snippets = loadSnippets();
+		snippets = loadSnippets(snippetsDir);
 		const active = snippets.filter((s) => enabled.has(s.id));
 		enabled = new Set();
 		updateWidget(ctx);
