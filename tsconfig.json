@@ -5,7 +5,8 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "skipLibCheck": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "types": ["vitest/globals"]
   },
-  "types": ["vitest/globals"]
+  "include": ["index.ts", "tests/**/*.ts", "types/**/*.d.ts"]
 }
