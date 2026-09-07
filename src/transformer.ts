@@ -35,12 +35,12 @@ function buildBlocks(snippets: Snippet[]): Block[] {
 			const children = folderSnippets
 				.filter((s) => !s.main)
 				.sort((a, b) => getOrder(a) - getOrder(b) || a.id.localeCompare(b.id));
-			const lines: string[] = [main.body.trim()];
-			for (const child of children) {
-				lines.push(`* ${child.body.trim()}`);
-			}
-			blocks.push({
-				text: lines.join("\n"),
+		const parts: string[] = [main.body.trim()];
+		for (const child of children) {
+			parts.push(child.body.trim());
+		}
+		blocks.push({
+			text: parts.join("\n\n"),
 				order: getOrder(main),
 				id: main.id,
 			});

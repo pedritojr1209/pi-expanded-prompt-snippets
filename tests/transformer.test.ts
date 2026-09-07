@@ -128,7 +128,7 @@ describe("composePrompt", () => {
 		expect(parts[userIdx - 1]).toBe("Z body");
 	});
 
-	it("formats folder main snippet body with active children as bullets, without forced header", () => {
+	it("formats folder main snippet body with active children as raw blocks separated by blank lines, without forced header", () => {
 		const snippets: Snippet[] = [
 			{
 				id: "group/main",
@@ -164,16 +164,16 @@ describe("composePrompt", () => {
 		const result = composePrompt(userText, snippets);
 		expect(result).not.toContain("## Group Main");
 		expect(result).toContain("Group rules.");
-		expect(result).toContain("* Rule A.");
-		expect(result).toContain("* Rule B.");
+		expect(result).toContain("Rule A.");
+		expect(result).toContain("Rule B.");
 		const bodyIdx = result.indexOf("Group rules.");
-		const bulletAIdx = result.indexOf("* Rule A.");
-		const bulletBIdx = result.indexOf("* Rule B.");
-		expect(bulletAIdx).toBeGreaterThan(bodyIdx);
-		expect(bulletBIdx).toBeGreaterThan(bulletAIdx);
+		const childAIdx = result.indexOf("Rule A.");
+		const childBIdx = result.indexOf("Rule B.");
+		expect(childAIdx).toBeGreaterThan(bodyIdx);
+		expect(childBIdx).toBeGreaterThan(childAIdx);
 	});
 
-	it("emits main body text directly, followed by child bullets, without forced header", () => {
+	it("emits main body text directly, followed by child bodies as raw blocks, without forced header", () => {
 		const snippets: Snippet[] = [
 			{
 				id: "group/main",
@@ -199,9 +199,9 @@ describe("composePrompt", () => {
 		const result = composePrompt(userText, snippets);
 		expect(result).not.toContain("## Group Main");
 		const bodyIdx = result.indexOf("Main body with whitespace.");
-		const bulletIdx = result.indexOf("* Rule A.");
+		const childIdx = result.indexOf("Rule A.");
 		expect(bodyIdx).toBeGreaterThan(-1);
-		expect(bulletIdx).toBeGreaterThan(bodyIdx);
+		expect(childIdx).toBeGreaterThan(bodyIdx);
 	});
 
 	it("formats standalone children as standard text blocks when folder main is not active", () => {
