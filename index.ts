@@ -83,8 +83,8 @@ export default function (pi: ExtensionAPI) {
 		const confirmed = await ctx.ui.custom<boolean>((tui, theme, _keybindings, done) => {
 			let previewScroll = 0;
 
-			const rowText = (row: TreeRow, width: number): string => {
-				const pointer = row.depth === state.cursor ? theme.fg("accent", "> ") : "  ";
+			const rowText = (row: TreeRow, index: number, width: number): string => {
+				const pointer = index === state.cursor ? theme.fg("accent", "> ") : "  ";
 				const indent = "  ".repeat(row.depth);
 				const node = row.node;
 
@@ -100,7 +100,7 @@ export default function (pi: ExtensionAPI) {
 
 			const buildRows = (width: number): string[] => {
 				const visible = getVisibleRows(tree, state);
-				return visible.map((r) => rowText(r, width));
+				return visible.map((r, i) => rowText(r, i, width));
 			};
 
 			const buildPreviewRows = (snippet: Snippet, width: number): string[] => {

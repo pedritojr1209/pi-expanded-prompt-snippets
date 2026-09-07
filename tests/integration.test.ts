@@ -224,4 +224,80 @@ Additional context.`,
 		const secondInput = await inputHandler({ text: "test" }, ctx);
 		expect(secondInput).toBeUndefined();
 	});
+
+	it("renders active cursor pointer on exactly one row", async () => {
+		const testDir = join(extensionDir, ".tmp-cursor-test");
+		if (existsSync(testDir)) rmSync(testDir, { recursive: true });
+		mkdirSync(testDir, { recursive: true });
+		writeFileSync(join(testDir, "a.md"), `---\nname: A\nplacement: append\norder: 1\n---\nBody A`);
+		writeFileSync(join(testDir, "b.md"), `---\nname: B\nplacement: append\norder: 2\n---\nBody B`);
+		writeFileSync(join(testDir, "c.md"), `---\nname: C\nplacement: append\norder: 3\n---\nBody C`);
+
+		const backupDir = join(extensionDir, "..", "snippets-backup");
+		let useTestDir = false;
+
+		if (existsSync(realSnippetsDir)) {
+			if (existsSync(backupDir)) rmSync(backupDir, { recursive: true });
+			renameSync(realSnippetsDir, backupDir);
+			useTestDir = true;
+		}
+		renameSync(testDir, realSnippetsDir);
+
+		try {
+			vi.resetModules();
+			const mod = await import("../index.js");
+			const pi = makePi();
+			mod.default(pi as any);
+
+			const openMenuHandler = (pi.registerShortcut as any).mock.calls.find(
+				(c: any[]) => c[0] === "alt+s",
+			)?.[1]?.handler;
+			expect(openMenuHandler).toBeDefined();
+
+			const width = 80;
+			let rendererObj: any;
+			const ctx = makeCtx();
+
+			(ctx.ui.custom as any).mockImplementation((rendererFn: any) => {
+				const tui = { requestRender: vi.fn(), terminal: { rows: 24 } };
+				const theme = {
+					fg: (_c: string, text: string) => text,
+					dim: (text: string) => text,
+					bold: (text: string) => text,
+					accent: (text: string) => text,
+					warning: (text: string) => text,
+					success: (text: string) => text,
+				};
+				const keybindings = {};
+				rendererObj = rendererFn(tui, theme, keybindings, () => {});
+				return Promise.resolve(false);
+			});
+
+			await openMenuHandler(ctx);
+
+			const contentRows = (rendererObj.render(width) as string[]).slice(3, -3);
+
+			expect(contentRows.length).toBeGreaterThan(0);
+
+			for (let cursor = 0; cursor < contentRows.length; cursor++) {
+				if (cursor > 0) {
+					rendererObj.handleInput("down");
+				}
+
+				const rows = rendererObj.render(width).slice(3, -3);
+				const pointerRows = rows.filter((r: string) => r.startsWith("> "));
+
+				expect(pointerRows).toHaveLength(1);
+				const activeRowIndex = rows.indexOf(pointerRows[0]);
+				expect(activeRowIndex).toBe(cursor);
+			}
+		} finally {
+			if (useTestDir && existsSync(backupDir)) {
+				if (existsSync(realSnippetsDir)) rmSync(realSnippetsDir, { recursive: true });
+				renameSync(backupDir, realSnippetsDir);
+			} else if (existsSync(realSnippetsDir)) {
+				rmSync(realSnippetsDir, { recursive: true });
+			}
+		}
+	});
 });
