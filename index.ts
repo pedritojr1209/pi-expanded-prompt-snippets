@@ -5,32 +5,39 @@
  * placement, order) stored in the `snippets/` directory next to this file.
  *
  * - Press alt+s or run /snippets to open the toggle menu (space: toggle,
- *   tab: preview, enter: apply, esc: cancel). The menu is a bordered,
- *   scrollable view.
+ *   arrows: navigate, left/right: collapse/expand, enter: apply, esc: cancel).
  * - Active snippets appear as a widget above the editor, with prepend and
  *   append groups visually distinguished.
- * - When a message is sent, active snippet bodies are prepended/appended to
- *   the message text in order (prepend group sorted by `order` first, then
- *   the typed text, then the append group sorted by `order`).
+ * - When a message is sent, active snippet bodies are composed via the prompt
+ *   transformer and injected around the message text.
  * - Toggles reset to all-off after each send and at session start.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { Snippet } from "./types/snippet.js";
 import { Key, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { loadSnippets } from "./src/discovery.js";
+import { composePrompt } from "./src/transformer.js";
+import {
+	buildTree,
+	createInitialState,
+	getVisibleRows,
+	type TreeNode,
+	type TreeRow,
+	toggleExpandCollapse,
+	toggleSelection,
+	moveCursor,
+} from "./src/tree.js";
 
 const extensionDir = dirname(fileURLToPath(import.meta.url));
 const snippetsDir = join(extensionDir, "snippets");
 const WIDGET_ID = "prompt-snippets";
 
 export default function (pi: ExtensionAPI) {
-	// Snippets last seen on disk (sorted). Refreshed whenever the menu opens or a message is sent.
 	let snippets: Snippet[] = [];
-	// Ids of currently toggled snippets. Resets to empty after each send and at session start.
 	let enabled = new Set<string>();
 
 	function updateWidget(ctx: ExtensionContext) {
@@ -62,7 +69,6 @@ export default function (pi: ExtensionAPI) {
 		}
 
 		snippets = loadSnippets(snippetsDir);
-		// Drop toggles for snippets that no longer exist on disk.
 		enabled = new Set([...enabled].filter((id) => snippets.some((s) => s.id === id)));
 
 		if (snippets.length === 0) {
@@ -71,35 +77,30 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		// Working copy; only committed to `enabled` on confirm.
-		const working = new Set(enabled);
+		const tree = buildTree(snippets);
+		let state = createInitialState(tree);
 
 		const confirmed = await ctx.ui.custom<boolean>((tui, theme, _keybindings, done) => {
-			const prepends = snippets.filter((s) => s.placement === "prepend");
-			const appends = snippets.filter((s) => s.placement === "append");
-			const items = [...prepends, ...appends];
-
-			let mode: "list" | "preview" = "list";
-			let cursor = 0;
-			let listScroll = 0;
 			let previewScroll = 0;
 
-			const itemRow = (snippet: Snippet, idx: number, width: number): string => {
-				const pointer = idx === cursor ? theme.fg("accent", "> ") : "  ";
-				const checkbox = working.has(snippet.id) ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
-				const desc = snippet.description ? theme.fg("dim", ` — ${snippet.description}`) : "";
-				return truncateToWidth(`${pointer}${checkbox} ${theme.bold(snippet.name)}${desc}`, width);
+			const rowText = (row: TreeRow, width: number): string => {
+				const pointer = row.depth === state.cursor ? theme.fg("accent", "> ") : "  ";
+				const indent = "  ".repeat(row.depth);
+				const node = row.node;
+
+				if (node.type === "folder") {
+					const arrow = row.expanded ? theme.fg("dim", "▾") : theme.fg("dim", "▸");
+					const checked = row.enabled ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
+					return truncateToWidth(`${pointer}${indent}${arrow} ${checked} ${theme.bold(node.name)}`, width);
+				}
+
+				const checkbox = row.enabled ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
+				return truncateToWidth(`${pointer}${indent}${checkbox} ${theme.bold(node.name)}`, width);
 			};
 
-			/** List rows with the item index each row corresponds to (null for headers/blanks). */
-			const buildListRows = (width: number): { text: string; itemIndex: number | null }[] => {
-				const rows: { text: string; itemIndex: number | null }[] = [];
-				rows.push({ text: theme.fg("dim", "↑ PREPEND — added before your message"), itemIndex: null });
-				prepends.forEach((s, i) => rows.push({ text: itemRow(s, i, width), itemIndex: i }));
-				rows.push({ text: "", itemIndex: null });
-				rows.push({ text: theme.fg("dim", "↓ APPEND — added after your message"), itemIndex: null });
-				appends.forEach((s, i) => rows.push({ text: itemRow(s, prepends.length + i, width), itemIndex: prepends.length + i }));
-				return rows;
+			const buildRows = (width: number): string[] => {
+				const visible = getVisibleRows(tree, state);
+				return visible.map((r) => rowText(r, width));
 			};
 
 			const buildPreviewRows = (snippet: Snippet, width: number): string[] => {
@@ -115,12 +116,6 @@ export default function (pi: ExtensionAPI) {
 				return rows;
 			};
 
-			/**
-			 * Slice `lines` to a scrollable viewport of at most `maxView` lines,
-			 * reserving indicator slots when clipped. Returns the visible lines
-			 * plus the clamped scroll position. When `focusRow` is given, scrolls
-			 * so it stays visible.
-			 */
 			const viewport = (
 				lines: string[],
 				scroll: number,
@@ -151,29 +146,40 @@ export default function (pi: ExtensionAPI) {
 				};
 			};
 
+			let mode: "list" | "preview" = "list";
+			let previewSnippet: Snippet | null = null;
+
 			return {
 				render(width: number): string[] {
-					// Reserve lines for: top border, title, blank, blank, hints, bottom border.
 					const maxView = Math.max(5, tui.terminal.rows - 10);
 
 					let content: string[];
 					let title: string;
 					let hints: string;
 					if (mode === "list") {
-						const rows = buildListRows(width);
-						const cursorRow = rows.findIndex((r) => r.itemIndex === cursor);
-						const v = viewport(rows.map((r) => r.text), listScroll, maxView, cursorRow);
+						const rows = buildRows(width);
+						const v = viewport(rows, 0, maxView, state.cursor);
 						content = v.out;
-						listScroll = v.scroll;
 						title = "Prompt snippets";
-						hints = "↑↓ navigate • Space toggle • Tab preview • Enter apply • Esc cancel";
+						hints = "↑↓ navigate • Space toggle • ←→ collapse/expand • Enter apply • Esc cancel";
 					} else {
-						const snippet = items[cursor];
-						const rows = buildPreviewRows(snippet, width);
-						const v = viewport(rows, previewScroll, maxView);
+						if (!previewSnippet) {
+							const visible = getVisibleRows(tree, state);
+							const row = visible[state.cursor];
+							if (row && row.node.type === "snippet") {
+								previewSnippet = snippets.find((s) => s.id === row.node.id) ?? null;
+							} else if (row && row.node.type === "folder") {
+								const folderNode = row.node;
+								if (folderNode.mainSnippetId) {
+									previewSnippet = snippets.find((s) => s.id === folderNode.mainSnippetId) ?? null;
+								}
+							}
+						}
+						const previewRows = previewSnippet ? buildPreviewRows(previewSnippet, width) : ["No snippet selected"];
+						const v = viewport(previewRows, previewScroll, maxView);
 						content = v.out;
 						previewScroll = v.scroll;
-						title = `Preview: ${snippet.name}`;
+						title = previewSnippet ? `Preview: ${previewSnippet.name}` : "Preview";
 						hints = "↑↓ scroll • Tab/Esc back";
 					}
 
@@ -191,19 +197,42 @@ export default function (pi: ExtensionAPI) {
 				handleInput(data: string) {
 					if (mode === "list") {
 						if (matchesKey(data, Key.up)) {
-							cursor = (cursor - 1 + items.length) % items.length;
+							state = moveCursor(tree, state, "up");
+							previewSnippet = null;
 							tui.requestRender();
 						} else if (matchesKey(data, Key.down)) {
-							cursor = (cursor + 1) % items.length;
+							state = moveCursor(tree, state, "down");
+							previewSnippet = null;
 							tui.requestRender();
 						} else if (matchesKey(data, Key.space)) {
-							const id = items[cursor].id;
-							if (working.has(id)) working.delete(id);
-							else working.add(id);
+							const visible = getVisibleRows(tree, state);
+							const row = visible[state.cursor];
+							if (row) {
+								const nodeId = row.node.type === "folder" && row.node.mainSnippetId
+									? row.node.mainSnippetId
+									: row.node.id;
+								state = toggleSelection(tree, state, nodeId);
+							}
+							previewSnippet = null;
+							tui.requestRender();
+						} else if (matchesKey(data, Key.left)) {
+							const visible = getVisibleRows(tree, state);
+							const row = visible[state.cursor];
+							if (row && row.node.type === "folder" && row.expanded) {
+								state = toggleExpandCollapse(tree, state, row.node.id);
+							}
+							tui.requestRender();
+						} else if (matchesKey(data, Key.right)) {
+							const visible = getVisibleRows(tree, state);
+							const row = visible[state.cursor];
+							if (row && row.node.type === "folder" && !row.expanded) {
+								state = toggleExpandCollapse(tree, state, row.node.id);
+							}
 							tui.requestRender();
 						} else if (matchesKey(data, Key.tab)) {
 							mode = "preview";
 							previewScroll = 0;
+							previewSnippet = null;
 							tui.requestRender();
 						} else if (matchesKey(data, Key.enter)) {
 							done(true);
@@ -227,7 +256,7 @@ export default function (pi: ExtensionAPI) {
 		});
 
 		if (confirmed) {
-			enabled = working;
+			enabled = state.enabled;
 		}
 		updateWidget(ctx);
 	}
@@ -240,20 +269,18 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("input", async (event, ctx) => {
-		if (enabled.size === 0) return; // continue unchanged
+		if (enabled.size === 0) return;
 
 		snippets = loadSnippets(snippetsDir);
 		const active = snippets.filter((s) => enabled.has(s.id));
 		enabled = new Set();
 		updateWidget(ctx);
 
-		if (active.length === 0) return; // all toggled snippets vanished from disk
+		if (active.length === 0) return;
 
-		const prependBodies = active.filter((s) => s.placement === "prepend").map((s) => s.body);
-		const appendBodies = active.filter((s) => s.placement === "append").map((s) => s.body);
 		return {
 			action: "transform",
-			text: [...prependBodies, event.text, ...appendBodies].join("\n\n"),
+			text: composePrompt(event.text, active),
 		};
 	});
 

@@ -28,6 +28,8 @@ declare module "@earendil-works/pi-tui" {
 	export const Key: {
 		up: string;
 		down: string;
+		left: string;
+		right: string;
 		space: string;
 		tab: string;
 		enter: string;
