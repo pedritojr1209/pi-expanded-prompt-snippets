@@ -27,6 +27,7 @@ export interface TreeRow {
 	readonly depth: number;
 	readonly enabled: boolean;
 	readonly expanded?: boolean;
+	readonly isLast?: boolean;
 }
 
 export function buildTree(snippets: Snippet[]): TreeNode[] {
@@ -186,8 +187,10 @@ export function toggleSelection(
 				nextEnabled.add(node.mainSnippetId);
 			}
 		}
+		const nextExpanded = new Set(state.expandedFolders);
+		nextExpanded.add(node.id);
 		return {
-			expandedFolders: state.expandedFolders,
+			expandedFolders: nextExpanded,
 			enabled: nextEnabled,
 			cursor: state.cursor,
 		};
@@ -266,7 +269,8 @@ function appendVisibleRows(
 	depth: number,
 	rows: TreeRow[],
 ): void {
-	for (const node of tree) {
+	for (let i = 0; i < tree.length; i++) {
+		const node = tree[i];
 		const isEnabled =
 			node.type === "folder"
 				? node.mainSnippetId !== undefined && state.enabled.has(node.mainSnippetId)
@@ -275,7 +279,7 @@ function appendVisibleRows(
 		const isExpanded =
 			node.type === "folder" ? state.expandedFolders.has(node.id) : undefined;
 
-		rows.push({ node, depth, enabled: isEnabled, expanded: isExpanded });
+		rows.push({ node, depth, enabled: isEnabled, expanded: isExpanded, isLast: i === tree.length - 1 });
 
 		if (node.type === "folder" && state.expandedFolders.has(node.id)) {
 			appendVisibleRows(node.children, state, depth + 1, rows);

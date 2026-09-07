@@ -355,6 +355,38 @@ describe("toggleSelection", () => {
 		expect(next.enabled.has("group/b")).toBe(false);
 	});
 
+	it("auto-expands a folder when it is toggled via spacebar", () => {
+		const snippets: Snippet[] = [
+			makeSnippet("group/a", { main: true }),
+			makeSnippet("group/b"),
+		];
+		const tree = buildTree(snippets);
+		const state: TreeState = {
+			expandedFolders: new Set(),
+			enabled: new Set(),
+			cursor: 0,
+		};
+
+		const next = toggleSelection(tree, state, "group");
+		expect(next.expandedFolders.has("group")).toBe(true);
+	});
+
+	it("does not collapse an already-expanded folder when toggling selection", () => {
+		const snippets: Snippet[] = [
+			makeSnippet("group/a", { main: true }),
+			makeSnippet("group/b"),
+		];
+		const tree = buildTree(snippets);
+		const state: TreeState = {
+			expandedFolders: new Set(["group"]),
+			enabled: new Set(),
+			cursor: 0,
+		};
+
+		const next = toggleSelection(tree, state, "group");
+		expect(next.expandedFolders.has("group")).toBe(true);
+	});
+
 	it("does not enable any snippet when folder has no main and is toggled", () => {
 		const snippets: Snippet[] = [
 			makeSnippet("group/a"),

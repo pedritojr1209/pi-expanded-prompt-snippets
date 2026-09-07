@@ -35,9 +35,9 @@ function buildBlocks(snippets: Snippet[]): Block[] {
 			const children = folderSnippets
 				.filter((s) => !s.main)
 				.sort((a, b) => getOrder(a) - getOrder(b) || a.id.localeCompare(b.id));
-			const lines: string[] = [`## ${main.name}`];
+			const lines: string[] = [`## ${main.name}`, main.body.trim()];
 			for (const child of children) {
-				lines.push(`* ${child.body}`);
+				lines.push(`* ${child.body.trim()}`);
 			}
 			blocks.push({
 				text: lines.join("\n"),

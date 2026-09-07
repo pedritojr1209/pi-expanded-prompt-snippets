@@ -87,15 +87,16 @@ export default function (pi: ExtensionAPI) {
 				const pointer = index === state.cursor ? theme.fg("accent", "> ") : "  ";
 				const indent = "  ".repeat(row.depth);
 				const node = row.node;
+				const branchPrefix = row.depth > 0 ? (row.isLast ? "└── " : "├── ") : "";
 
 				if (node.type === "folder") {
 					const arrow = row.expanded ? theme.fg("dim", "▾") : theme.fg("dim", "▸");
 					const checked = row.enabled ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
-					return truncateToWidth(`${pointer}${indent}${arrow} ${checked} ${theme.bold(node.name)}`, width);
+					return truncateToWidth(`${pointer}${indent}${branchPrefix}${arrow} ${checked} ${theme.bold(node.name)}`, width);
 				}
 
 				const checkbox = row.enabled ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
-				return truncateToWidth(`${pointer}${indent}${checkbox} ${theme.bold(node.name)}`, width);
+				return truncateToWidth(`${pointer}${indent}${branchPrefix}${checkbox} ${theme.bold(node.name)}`, width);
 			};
 
 			const buildRows = (width: number): string[] => {

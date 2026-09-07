@@ -172,6 +172,37 @@ describe("composePrompt", () => {
 		expect(bulletBIdx).toBeGreaterThan(bulletAIdx);
 	});
 
+	it("emits main body text between header and child bullets", () => {
+		const snippets: Snippet[] = [
+			{
+				id: "group/main",
+				filePath: "/abs/snippets/group/main.md",
+				name: "Group Main",
+				description: "",
+				placement: "prepend",
+				order: 1,
+				main: true,
+				body: "  Main body with whitespace.  ",
+			},
+			{
+				id: "group/child-a",
+				filePath: "/abs/snippets/group/child-a.md",
+				name: "Child A",
+				description: "",
+				placement: "prepend",
+				order: 2,
+				main: false,
+				body: "Rule A.",
+			},
+		];
+		const result = composePrompt(userText, snippets);
+		const headerIdx = result.indexOf("## Group Main");
+		const bodyIdx = result.indexOf("Main body with whitespace.");
+		const bulletIdx = result.indexOf("* Rule A.");
+		expect(bodyIdx).toBeGreaterThan(headerIdx);
+		expect(bulletIdx).toBeGreaterThan(bodyIdx);
+	});
+
 	it("formats standalone children as standard text blocks when folder main is not active", () => {
 		const allSnippets: Snippet[] = [
 			{
