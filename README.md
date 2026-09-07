@@ -3,23 +3,21 @@
 [![npm](https://img.shields.io/npm/v/pi-expanded-prompt-snippets)](https://www.npmjs.com/package/pi-expanded-prompt-snippets)
 [![GitHub](https://img.shields.io/badge/GitHub-pi--expanded--prompt--snippets-blue)](https://github.com/pedritojr1209/pi-expanded-prompt-snippets)
 
-Expanded hierarchical prompt snippet and dynamic persona engine for the Pi coding agent.
+Hierarchical prompt snippet and dynamic persona engine for the Pi coding agent.
 
-Forked from and based on Amos Blomqvist's original [prompt-snippets](https://github.com/amosblomqvist/pi-config).
+Forked and expanded from Amos Blomqvist's original [`prompt-snippets`](https://github.com/amosblomqvist/pi-config).
 
-## Core Features
+## Core Capabilities
 
-- **Arbitrary folder hierarchy** — organize snippets into nested directories under `snippets/**/*.md` and `snippets/**/*.markdown`.
+- **Recursive folder discovery** — snippets are loaded from `snippets/**/*.md` and `snippets/**/*.markdown`, supporting arbitrary nesting.
 - **Interactive collapsible tree TUI** — open with `alt+s` or `/snippets` to browse, preview, and toggle snippets in a navigable tree.
-- **Folder toggle with `main: true` header semantics** — marking a snippet as `main: true` makes its folder toggleable in the tree; enabling it injects a Markdown header plus bulleted child rules from all non-main siblings in that folder.
-- **Automatic prompt composition** — active snippets are merged into the outgoing message as prepend or append blocks, sorted by `order`.
-- **Ephemeral per-turn lifecycle** — toggles reset to all-off after each send and at session start, so snippets are always chosen intentionally.
+- **Folder toggle with `main: true` header semantics** — a folder becomes toggleable when it contains a `main: true` snippet; enabling it injects a `## Folder Header` followed by `* Child Rule` bullets from all non-main siblings.
+- **Structured prompt composition** — active snippets are merged into the outgoing message as prepend or append blocks, sorted by `order`.
+- **Ephemeral per-turn steering** — toggles reset to all-off after each send and at session start; the active widget shows current steering and disappears on dispatch.
 
-## Installation
+## Installation Guide
 
-Choose the option that fits your workflow.
-
-### Option 1: Git Clone into Pi User Extensions
+### Method 1: Global User Extensions (Recommended)
 
 Clone directly into Pi's global extensions directory.
 
@@ -35,33 +33,79 @@ git clone https://github.com/pedritojr1209/pi-expanded-prompt-snippets.git "$env
 git clone https://github.com/pedritojr1209/pi-expanded-prompt-snippets.git ~/.pi/agent/extensions/pi-expanded-prompt-snippets
 ```
 
-### Option 2: Local Development Link (Windows Junction)
+### Method 2: Pi Configuration File (Global without moving files)
 
-Work on the extension in a separate folder and symlink it into Pi extensions using a NTFS junction. Changes in the dev folder are reflected immediately.
+Add the absolute path to your `~/.pi/config.json`:
+
+```json
+{
+  "extensions": ["G:/Pi-OS/projects/pi-expanded-prompt-snippets"]
+}
+```
+
+Pi loads the extension from that path on startup.
+
+### Method 3: Windows NTFS Junction (Best for development)
+
+Create a junction from Pi's extensions folder to your dev checkout. Changes in the dev folder are reflected immediately without copying.
 
 ```powershell
-# In your development folder (e.g. G:\Pi-OS\projects\pi-expanded-prompt-snippets)
 $extensionName = "pi-expanded-prompt-snippets"
 $piExtensions = "$env:USERPROFILE\.pi\agent\extensions"
 $junctionPath = Join-Path $piExtensions $extensionName
+$devTarget = "G:\Pi-OS\projects\pi-expanded-prompt-snippets"
 
 if (-not (Test-Path -LiteralPath $junctionPath)) {
-    New-Item -ItemType Junction -Path $junctionPath -Target (Get-Location)
-    Write-Host "Junction created: $junctionPath -> $(Get-Location)"
+    New-Item -ItemType Junction -Path $junctionPath -Target $devTarget
+    Write-Host "Junction created: $junctionPath -> $devTarget"
 } else {
     Write-Host "Junction already exists: $junctionPath"
 }
 ```
 
-### Option 3: Project-Level Installation
+### Method 4: Project-Local Installation
 
-Clone the repo into a project's `.pi/extensions/` directory to share the extension with everyone working on that project.
+Place the extension inside a target repo at `.pi/extensions/pi-expanded-prompt-snippets` so it is shared with everyone working on that project.
 
 ```bash
 mkdir -p .pi/extensions && git clone https://github.com/pedritojr1209/pi-expanded-prompt-snippets.git .pi/extensions/pi-expanded-prompt-snippets
 ```
 
-## Interactive Controls & Keybindings
+### Method 5: Ad-Hoc Runtime Flag (Zero install)
+
+Launch Pi with the extension path passed directly:
+
+```bash
+pi --extension "G:\Pi-OS\projects\pi-expanded-prompt-snippets"
+```
+
+## Quickstart & Verification Demo
+
+1. **Launch Pi** in a terminal.
+2. Press **`Alt+S`** or run **`/snippets`** to open the toggle menu.
+3. Navigate with **`Up`/`Down`**, press **`Space`** to toggle a demo snippet or an entire folder marked `main: true`.
+4. Type a test prompt, for example:
+
+   ```text
+   Implement a debounce function in TypeScript.
+   ```
+
+5. Send the message. Observe:
+   - The active widget above the editor disappears immediately (auto-reset).
+   - The prompt sent to the model contains your text wrapped with the composed snippet blocks, e.g.:
+
+     ```markdown
+     ## Review
+     * Check for injection vulnerabilities and unsafe input handling.
+
+     Delegate mechanical work to subagents. Keep your own context window lean.
+
+     Implement a debounce function in TypeScript.
+
+     Ask questions until you are 100% sure you know exactly what to do.
+     ```
+
+## Keybindings Reference
 
 Open the snippet toggle menu with `alt+s` or the `/snippets` command.
 
@@ -76,11 +120,7 @@ Open the snippet toggle menu with `alt+s` or the `/snippets` command.
 | `Enter` | Apply selections and close |
 | `Escape` | Cancel and close |
 
-### Preview Mode
-
-When you press `Tab` on a snippet or folder (with a `main: true` snippet), the menu switches to preview mode showing the snippet's full metadata and body. Use `Up`/`Down` to scroll long content. Press `Tab` or `Escape` to return to the list. Your cursor position is preserved across mode switches.
-
-## Snippet Organization & Directory Layout
+## Directory Organization & `@role` Workflow
 
 Snippets are discovered recursively from the `snippets/` directory next to `index.ts`. The collapsible tree in the TUI mirrors the folder structure exactly.
 
@@ -96,28 +136,31 @@ snippets/
 │   ├── main.md              # main: true — toggles the whole folder
 │   ├── security.md
 │   └── style.md
-└── @orchestrator/
+├── @orchestrator/
+│   ├── main.md
+│   └── plan-decompose.md
+└── @binah/
     ├── main.md
-    └── plan-decompose.md
+    └── validator.md
 ```
 
 - **Leaf files** are toggleable individually.
 - **Folders** are toggleable only when they contain a snippet with `main: true`. Toggling a folder enables (or disables) that main snippet.
-- Use `@`-prefixed folders to namespace role-based persona bundles.
+- Use `@`-prefixed folders to namespace role-based persona bundles (`@orchestrator`, `@binah`). Toggling a role folder activates the entire persona as a single composed block.
 
-## Frontmatter Specification
+## Frontmatter Schema & Composition Output
 
 Every snippet file is a Markdown document with an optional YAML frontmatter block at the top.
 
 ```markdown
 ---
-name: Concise
-description: Keep answers short and to the point
+name: Review
+description: Review every public API for correctness and clarity.
 placement: prepend
 order: 10
 main: true
 ---
-Keep your response concise. Skip preamble and unnecessary explanation.
+Review every public API for correctness and clarity.
 ```
 
 | Field | Required | Type | Notes |
@@ -128,58 +171,22 @@ Keep your response concise. Skip preamble and unnecessary explanation.
 | `order` | No | number | Sort key within the prepend or append group. Lower numbers come first. Default: `9999`. Ties are broken by snippet id. |
 | `main` | No | boolean | When `true`, this snippet becomes the folder's toggle header. Exactly one `main` per folder is recommended; conflicts are resolved by lowest `order` then filesystem order. |
 
-## Composition Example
+### Before-and-After Example
 
-Given the following files:
+Given these active snippets:
 
-**`snippets/review/main.md`**
-```markdown
----
-name: Review
-placement: prepend
-order: 10
-main: true
----
-Review every public API for correctness and clarity.
-```
+- `snippets/review/main.md` (`placement: prepend`, `order: 10`, `main: true`)
+- `snippets/review/security.md` (`placement: prepend`, `order: 5`)
+- `snippets/orchestrator-mode.md` (`placement: prepend`, `order: 30`)
+- `snippets/ask-questions.md` (`placement: append`, `order: 10`)
 
-**`snippets/review/security.md`**
-```markdown
----
-name: Security
-placement: prepend
-order: 5
----
-Check for injection vulnerabilities and unsafe input handling.
-```
-
-**`snippets/orchestrator-mode.md`**
-```markdown
----
-name: Orchestrator mode
-placement: prepend
-order: 30
----
-Delegate mechanical work to subagents. Keep your own context window lean.
-```
-
-**`snippets/ask-questions.md`**
-```markdown
----
-name: Ask questions
-placement: append
-order: 10
----
-Ask questions until you are 100% sure you know exactly what to do.
-```
-
-If the user enables `review/main.md`, `orchestrator-mode.md`, and `ask-questions.md` and sends:
+User sends:
 
 ```text
 Refactor the auth module.
 ```
 
-The extension produces the following transformed text:
+The extension produces the following transformed prompt:
 
 ```markdown
 ## Review
@@ -199,7 +206,7 @@ Ask questions until you are 100% sure you know exactly what to do.
 3. **Append group** — active snippets with `placement: append` are sorted by `order` (ties broken by id), then joined with blank lines after the user text.
 4. **Folder `main` blocks** — when a `main: true` snippet is active, it generates a single block with a `## <name>` header followed by `* <body>` bullets for every non-main sibling in the same folder, sorted by `order`. The block's sort position is determined by the main snippet's `order`.
 
-## Verification & Contributing
+## Development & Tests
 
 ### Run Tests
 
