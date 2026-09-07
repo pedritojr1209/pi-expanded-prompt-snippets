@@ -127,21 +127,8 @@ function buildFolderChildren(snippets: Snippet[], parentFolder: string): TreeNod
 }
 
 export function createInitialState(tree: TreeNode[]): TreeState {
-	const expandedFolders = new Set<string>();
-
-	function collectFolderIds(nodes: TreeNode[]): void {
-		for (const node of nodes) {
-			if (node.type === "folder") {
-				expandedFolders.add(node.id);
-				collectFolderIds(node.children);
-			}
-		}
-	}
-
-	collectFolderIds(tree);
-
 	return {
-		expandedFolders,
+		expandedFolders: new Set(),
 		enabled: new Set(),
 		cursor: 0,
 	};
@@ -193,12 +180,33 @@ export function toggleSelection(
 	const nextEnabled = new Set(state.enabled);
 
 	if (node.type === "folder") {
-		if (node.mainSnippetId) {
-			if (nextEnabled.has(node.mainSnippetId)) {
+		const isCurrentlyEnabled = node.mainSnippetId !== undefined && nextEnabled.has(node.mainSnippetId);
+
+		if (isCurrentlyEnabled) {
+			if (node.mainSnippetId) {
 				nextEnabled.delete(node.mainSnippetId);
-			} else {
-				nextEnabled.add(node.mainSnippetId);
 			}
+			for (const child of node.children) {
+				for (const id of collectSnippetIds(child)) {
+					nextEnabled.delete(id);
+				}
+			}
+			const nextExpanded = new Set(state.expandedFolders);
+			nextExpanded.delete(node.id);
+			const nextRows = getVisibleRows(tree, {
+				...state,
+				expandedFolders: nextExpanded,
+			});
+			const clampedCursor = Math.min(state.cursor, Math.max(0, nextRows.length - 1));
+			return {
+				expandedFolders: nextExpanded,
+				enabled: nextEnabled,
+				cursor: clampedCursor,
+			};
+		}
+
+		if (node.mainSnippetId) {
+			nextEnabled.add(node.mainSnippetId);
 		}
 		const nextExpanded = new Set(state.expandedFolders);
 		nextExpanded.add(node.id);
@@ -309,4 +317,15 @@ function findNode(tree: TreeNode[], nodeId: string): TreeNode | undefined {
 		}
 	}
 	return undefined;
+}
+
+function collectSnippetIds(node: TreeNode): string[] {
+	if (node.type === "snippet") {
+		return [node.id];
+	}
+	const ids: string[] = [];
+	for (const child of node.children) {
+		ids.push(...collectSnippetIds(child));
+	}
+	return ids;
 }

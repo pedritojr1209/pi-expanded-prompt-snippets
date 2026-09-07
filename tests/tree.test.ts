@@ -145,7 +145,7 @@ describe("buildTree", () => {
 });
 
 describe("createInitialState", () => {
-	it("creates state with all folders expanded by default and empty enabled set", () => {
+	it("creates state with folders collapsed by default and empty enabled set", () => {
 		const snippets: Snippet[] = [
 			makeSnippet("group/a"),
 			makeSnippet("group/b"),
@@ -153,21 +153,7 @@ describe("createInitialState", () => {
 		const tree = buildTree(snippets);
 		const state = createInitialState(tree);
 
-		const allFolderIds: string[] = [];
-		function collectFolderIds(nodes: typeof tree) {
-			for (const node of nodes) {
-				if (node.type === "folder") {
-					allFolderIds.push(node.id);
-					collectFolderIds(node.children);
-				}
-			}
-		}
-		collectFolderIds(tree);
-
-		expect(state.expandedFolders.size).toBe(allFolderIds.length);
-		for (const id of allFolderIds) {
-			expect(state.expandedFolders.has(id)).toBe(true);
-		}
+		expect(state.expandedFolders.size).toBe(0);
 		expect(state.enabled.size).toBe(0);
 		expect(state.cursor).toBe(0);
 	});
@@ -417,20 +403,22 @@ describe("toggleSelection", () => {
 		expect(next.enabled.size).toBe(0);
 	});
 
-	it("untoggles only the folder main when a folder with main is untoggled", () => {
+	it("untoggles a folder's main snippet and all active child snippets when the folder is untoggled, and collapses the folder", () => {
 		const snippets: Snippet[] = [
 			makeSnippet("group/a", { main: true }),
 			makeSnippet("group/b"),
 		];
 		const tree = buildTree(snippets);
 		const state: TreeState = {
-			expandedFolders: new Set(),
-			enabled: new Set(["group/a"]),
+			expandedFolders: new Set(["group"]),
+			enabled: new Set(["group/a", "group/b"]),
 			cursor: 0,
 		};
 
 		const next = toggleSelection(tree, state, "group");
 		expect(next.enabled.has("group/a")).toBe(false);
+		expect(next.enabled.has("group/b")).toBe(false);
+		expect(next.expandedFolders.has("group")).toBe(false);
 	});
 
 	it("does not toggle leaf snippets when a folder with main is toggled", () => {
@@ -448,6 +436,23 @@ describe("toggleSelection", () => {
 		const next = toggleSelection(tree, state, "group");
 		expect(next.enabled.has("group/b")).toBe(true);
 		expect(next.enabled.has("group/a")).toBe(true);
+	});
+
+	it("turning ON an unchecked folder adds its mainSnippetId to enabled and expands the folder", () => {
+		const snippets: Snippet[] = [
+			makeSnippet("group/a", { main: true }),
+			makeSnippet("group/b"),
+		];
+		const tree = buildTree(snippets);
+		const state: TreeState = {
+			expandedFolders: new Set(),
+			enabled: new Set(),
+			cursor: 0,
+		};
+
+		const next = toggleSelection(tree, state, "group");
+		expect(next.enabled.has("group/a")).toBe(true);
+		expect(next.expandedFolders.has("group")).toBe(true);
 	});
 });
 
