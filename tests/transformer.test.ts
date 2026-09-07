@@ -8,13 +8,12 @@ describe("composePrompt", () => {
 	const userText = "User message here";
 
 	it("defaults placement fallback to append when omitted", () => {
-		const snippets: Snippet[] = [
+		const snippets = [
 			{
 				id: "snippet-a",
 				filePath: "/abs/snippets/snippet-a.md",
 				name: "A",
 				description: "",
-				placement: "append",
 				order: 1,
 				main: false,
 				body: "Body A",
@@ -24,12 +23,11 @@ describe("composePrompt", () => {
 				filePath: "/abs/snippets/snippet-b.md",
 				name: "B",
 				description: "",
-				placement: "append",
 				order: 2,
 				main: false,
 				body: "Body B",
 			},
-		];
+		] as Snippet[];
 		const result = composePrompt(userText, snippets);
 		const parts = result.split("\n\n");
 		expect(parts).toContain("Body A");
@@ -197,10 +195,10 @@ describe("composePrompt", () => {
 				body: "Rule A.",
 			},
 		];
-	const inactive = allSnippets.filter((s) => s.id !== "group/main");
-	const result = composePrompt(userText, inactive);
-	expect(result).not.toContain("## Group Main");
-	expect(result).toBe("Rule A.\n\nUser message here");
+		const inactive = allSnippets.filter((s) => s.id !== "group/main");
+		const result = composePrompt(userText, inactive);
+		expect(result).not.toContain("## Group Main");
+		expect(result).toBe("Rule A.\n\nUser message here");
 	});
 
 	it("keeps prepend and append separated by user message", () => {

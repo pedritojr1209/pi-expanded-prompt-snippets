@@ -63,8 +63,14 @@ export function composePrompt(
 ): string {
 	if (activeSnippets.length === 0) return userText;
 
-	const prependSnippets = activeSnippets.filter((s) => s.placement === "prepend");
-	const appendSnippets = activeSnippets.filter((s) => s.placement === "append");
+	const normalizePlacement = (snippet: Snippet): Snippet => {
+		if (snippet.placement === "prepend") return snippet;
+		return { ...snippet, placement: "append" as const };
+	};
+	const normalized = activeSnippets.map(normalizePlacement);
+
+	const prependSnippets = normalized.filter((s) => s.placement === "prepend");
+	const appendSnippets = normalized.filter((s) => s.placement === "append");
 
 	const prependBlocks = buildBlocks(prependSnippets).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 	const appendBlocks = buildBlocks(appendSnippets).sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
