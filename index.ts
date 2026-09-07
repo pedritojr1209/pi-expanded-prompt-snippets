@@ -205,18 +205,15 @@ export default function (pi: ExtensionAPI) {
 							state = moveCursor(tree, state, "down");
 							previewSnippet = null;
 							tui.requestRender();
-						} else if (matchesKey(data, Key.space)) {
-							const visible = getVisibleRows(tree, state);
-							const row = visible[state.cursor];
-							if (row) {
-								const nodeId = row.node.type === "folder" && row.node.mainSnippetId
-									? row.node.mainSnippetId
-									: row.node.id;
-								state = toggleSelection(tree, state, nodeId);
-							}
-							previewSnippet = null;
-							tui.requestRender();
-						} else if (matchesKey(data, Key.left)) {
+					} else if (matchesKey(data, Key.space)) {
+						const visible = getVisibleRows(tree, state);
+						const row = visible[state.cursor];
+						if (row) {
+							state = toggleSelection(tree, state, row.node.id);
+						}
+						previewSnippet = null;
+						tui.requestRender();
+					} else if (matchesKey(data, Key.left)) {
 							const visible = getVisibleRows(tree, state);
 							const row = visible[state.cursor];
 							if (row && row.node.type === "folder" && row.expanded) {

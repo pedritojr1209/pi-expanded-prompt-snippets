@@ -145,7 +145,7 @@ describe("buildTree", () => {
 });
 
 describe("createInitialState", () => {
-	it("creates state with all folders collapsed and empty enabled set", () => {
+	it("creates state with all folders expanded by default and empty enabled set", () => {
 		const snippets: Snippet[] = [
 			makeSnippet("group/a"),
 			makeSnippet("group/b"),
@@ -153,7 +153,21 @@ describe("createInitialState", () => {
 		const tree = buildTree(snippets);
 		const state = createInitialState(tree);
 
-		expect(state.expandedFolders.size).toBe(0);
+		const allFolderIds: string[] = [];
+		function collectFolderIds(nodes: typeof tree) {
+			for (const node of nodes) {
+				if (node.type === "folder") {
+					allFolderIds.push(node.id);
+					collectFolderIds(node.children);
+				}
+			}
+		}
+		collectFolderIds(tree);
+
+		expect(state.expandedFolders.size).toBe(allFolderIds.length);
+		for (const id of allFolderIds) {
+			expect(state.expandedFolders.has(id)).toBe(true);
+		}
 		expect(state.enabled.size).toBe(0);
 		expect(state.cursor).toBe(0);
 	});

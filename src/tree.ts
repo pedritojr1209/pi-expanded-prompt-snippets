@@ -127,8 +127,21 @@ function buildFolderChildren(snippets: Snippet[], parentFolder: string): TreeNod
 }
 
 export function createInitialState(tree: TreeNode[]): TreeState {
+	const expandedFolders = new Set<string>();
+
+	function collectFolderIds(nodes: TreeNode[]): void {
+		for (const node of nodes) {
+			if (node.type === "folder") {
+				expandedFolders.add(node.id);
+				collectFolderIds(node.children);
+			}
+		}
+	}
+
+	collectFolderIds(tree);
+
 	return {
-		expandedFolders: new Set(),
+		expandedFolders,
 		enabled: new Set(),
 		cursor: 0,
 	};

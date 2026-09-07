@@ -128,7 +128,7 @@ describe("composePrompt", () => {
 		expect(parts[userIdx - 1]).toBe("Z body");
 	});
 
-	it("formats folder main snippet as header with active children as bullets", () => {
+	it("formats folder main snippet body with active children as bullets, without forced header", () => {
 		const snippets: Snippet[] = [
 			{
 				id: "group/main",
@@ -162,17 +162,18 @@ describe("composePrompt", () => {
 			},
 		];
 		const result = composePrompt(userText, snippets);
-		expect(result).toContain("## Group Main");
+		expect(result).not.toContain("## Group Main");
+		expect(result).toContain("Group rules.");
 		expect(result).toContain("* Rule A.");
 		expect(result).toContain("* Rule B.");
-		const headerIdx = result.indexOf("## Group Main");
+		const bodyIdx = result.indexOf("Group rules.");
 		const bulletAIdx = result.indexOf("* Rule A.");
 		const bulletBIdx = result.indexOf("* Rule B.");
-		expect(bulletAIdx).toBeGreaterThan(headerIdx);
+		expect(bulletAIdx).toBeGreaterThan(bodyIdx);
 		expect(bulletBIdx).toBeGreaterThan(bulletAIdx);
 	});
 
-	it("emits main body text between header and child bullets", () => {
+	it("emits main body text directly, followed by child bullets, without forced header", () => {
 		const snippets: Snippet[] = [
 			{
 				id: "group/main",
@@ -196,10 +197,10 @@ describe("composePrompt", () => {
 			},
 		];
 		const result = composePrompt(userText, snippets);
-		const headerIdx = result.indexOf("## Group Main");
+		expect(result).not.toContain("## Group Main");
 		const bodyIdx = result.indexOf("Main body with whitespace.");
 		const bulletIdx = result.indexOf("* Rule A.");
-		expect(bodyIdx).toBeGreaterThan(headerIdx);
+		expect(bodyIdx).toBeGreaterThan(-1);
 		expect(bulletIdx).toBeGreaterThan(bodyIdx);
 	});
 
