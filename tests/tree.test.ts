@@ -110,6 +110,22 @@ describe("buildTree", () => {
 		const tree = buildTree([]);
 		expect(tree).toEqual([]);
 	});
+
+	it("does not inherit mainSnippetId from nested descendant folders", () => {
+		const snippets: Snippet[] = [
+			makeSnippet("parent/child/leaf", { main: true }),
+			makeSnippet("parent/sibling"),
+		];
+
+		const tree = buildTree(snippets);
+		const parent = tree.find((n) => n.type === "folder" && n.id === "parent") as FolderNode | undefined;
+		const child = parent?.children.find((n) => n.type === "folder" && n.id === "parent/child") as FolderNode | undefined;
+
+		expect(parent).toBeDefined();
+		expect(parent!.mainSnippetId).toBeUndefined();
+		expect(child).toBeDefined();
+		expect(child!.mainSnippetId).toBe("parent/child/leaf");
+	});
 });
 
 describe("createInitialState", () => {

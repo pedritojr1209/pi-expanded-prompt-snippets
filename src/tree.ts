@@ -12,7 +12,6 @@ export interface SnippetTreeNode {
 	readonly type: "snippet";
 	readonly id: string;
 	readonly name: string;
-	readonly snippetId: string;
 }
 
 export type TreeNode = FolderNode | SnippetTreeNode;
@@ -66,7 +65,8 @@ export function buildTree(snippets: Snippet[]): TreeNode[] {
 	for (const folderId of topLevelFolderIds) {
 		const folderSnippets = byFolder.get(folderId)!;
 		const sorted = sortSnippets(folderSnippets);
-		const mainSnippetId = sorted.find((s) => s.main)?.id;
+		const direct = sorted.filter((s) => folderOf(s.id) === folderId);
+		const mainSnippetId = direct.find((s) => s.main)?.id;
 		const children = buildFolderChildren(sorted, folderId);
 		result.push({
 			type: "folder",
@@ -111,7 +111,7 @@ function buildFolderChildren(snippets: Snippet[], parentFolder: string): TreeNod
 	for (const subFolderId of sortedSubFolderIds) {
 		const subSnippets = nestedMap.get(subFolderId)!;
 		const sorted = sortSnippets(subSnippets);
-		const mainSnippetId = sorted.find((s) => s.main)?.id;
+		const mainSnippetId = sorted.filter((s) => folderOf(s.id) === subFolderId).find((s) => s.main)?.id;
 		const children = buildFolderChildren(sorted, subFolderId);
 		result.push({
 			type: "folder",
@@ -126,11 +126,10 @@ function buildFolderChildren(snippets: Snippet[], parentFolder: string): TreeNod
 }
 
 export function createInitialState(tree: TreeNode[]): TreeState {
-	const visibleCount = countVisibleRows(tree, new Set());
 	return {
 		expandedFolders: new Set(),
 		enabled: new Set(),
-		cursor: Math.max(0, Math.min(0, visibleCount - 1)),
+		cursor: 0,
 	};
 }
 
@@ -247,7 +246,6 @@ function snippetToNode(snippet: Snippet): SnippetTreeNode {
 		type: "snippet",
 		id: snippet.id,
 		name: snippet.name,
-		snippetId: snippet.id,
 	};
 }
 
