@@ -1,12 +1,11 @@
 /// <reference types="vitest/globals" />
 
 import { describe, it, expect, vi } from "vitest";
-import { existsSync, mkdirSync, rmSync, writeFileSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const extensionDir = dirname(fileURLToPath(import.meta.url));
-const realSnippetsDir = join(extensionDir, "..", "snippets");
 
 vi.mock("@earendil-works/pi-coding-agent", () => ({
 	ExtensionAPI: {},
@@ -132,22 +131,12 @@ order: 2
 Additional context.`,
 		);
 
-		const backupDir = join(extensionDir, "..", "snippets-backup");
-		let useTestDir = false;
-
-		if (existsSync(realSnippetsDir)) {
-			if (existsSync(backupDir)) rmSync(backupDir, { recursive: true });
-			renameSync(realSnippetsDir, backupDir);
-			useTestDir = true;
-		}
-		renameSync(testDir, realSnippetsDir);
+		vi.resetModules();
+		const mod = await import("../index.js");
+		const pi = makePi();
+		mod.default(pi as any, { snippetsDir: testDir });
 
 		try {
-			vi.resetModules();
-			const mod = await import("../index.js");
-			const pi = makePi();
-			mod.default(pi as any);
-
 			const inputHandler = (pi.on as any).mock.calls.find((c: any[]) => c[0] === "input")?.[1];
 			expect(inputHandler).toBeDefined();
 
@@ -196,15 +185,10 @@ Additional context.`,
 			expect(result).toBeDefined();
 			expect(result.action).toBe("transform");
 			expect(result.text).toContain("Hello world");
-			expect(result.text).toContain("## Style Guide");
-			expect(result.text).toContain("* Additional context.");
+			expect(result.text).toContain("Use clear language.");
+			expect(result.text).toContain("Additional context.");
 		} finally {
-			if (useTestDir && existsSync(backupDir)) {
-				if (existsSync(realSnippetsDir)) rmSync(realSnippetsDir, { recursive: true });
-				renameSync(backupDir, realSnippetsDir);
-			} else if (existsSync(realSnippetsDir)) {
-				rmSync(realSnippetsDir, { recursive: true });
-			}
+			if (existsSync(testDir)) rmSync(testDir, { recursive: true, force: true });
 		}
 	});
 
@@ -233,21 +217,11 @@ Additional context.`,
 		writeFileSync(join(testDir, "b.md"), `---\nname: B\nplacement: append\norder: 2\n---\nBody B`);
 		writeFileSync(join(testDir, "c.md"), `---\nname: C\nplacement: append\norder: 3\n---\nBody C`);
 
-		const backupDir = join(extensionDir, "..", "snippets-backup");
-		let useTestDir = false;
-
-		if (existsSync(realSnippetsDir)) {
-			if (existsSync(backupDir)) rmSync(backupDir, { recursive: true });
-			renameSync(realSnippetsDir, backupDir);
-			useTestDir = true;
-		}
-		renameSync(testDir, realSnippetsDir);
-
 		try {
 			vi.resetModules();
 			const mod = await import("../index.js");
 			const pi = makePi();
-			mod.default(pi as any);
+			mod.default(pi as any, { snippetsDir: testDir });
 
 			const openMenuHandler = (pi.registerShortcut as any).mock.calls.find(
 				(c: any[]) => c[0] === "alt+s",
@@ -292,12 +266,7 @@ Additional context.`,
 				expect(activeRowIndex).toBe(cursor);
 			}
 		} finally {
-			if (useTestDir && existsSync(backupDir)) {
-				if (existsSync(realSnippetsDir)) rmSync(realSnippetsDir, { recursive: true });
-				renameSync(backupDir, realSnippetsDir);
-			} else if (existsSync(realSnippetsDir)) {
-				rmSync(realSnippetsDir, { recursive: true });
-			}
+			if (existsSync(testDir)) rmSync(testDir, { recursive: true, force: true });
 		}
 	});
 

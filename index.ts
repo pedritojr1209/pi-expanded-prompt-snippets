@@ -32,8 +32,6 @@ import {
 	moveCursor,
 } from "./src/tree.js";
 
-const extensionDir = dirname(fileURLToPath(import.meta.url));
-const snippetsDir = join(extensionDir, "snippets");
 const WIDGET_ID = "prompt-snippets";
 
 const dimText = (theme: any, text: string): string => {
@@ -42,7 +40,9 @@ const dimText = (theme: any, text: string): string => {
 	return `\x1b[2m${text}\x1b[22m`;
 };
 
-export default function (pi: ExtensionAPI) {
+export default function (pi: ExtensionAPI, options?: { snippetsDir?: string }) {
+	const extensionDir = dirname(fileURLToPath(import.meta.url));
+	const snippetsDir = options?.snippetsDir ?? join(extensionDir, "snippets");
 	let snippets: Snippet[] = [];
 	let enabled = new Set<string>();
 
