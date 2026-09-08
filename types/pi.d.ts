@@ -14,7 +14,7 @@ declare module "@earendil-works/pi-coding-agent" {
 			custom<T>(renderer: (tui: any, theme: any, keybindings: any, done: (result: T) => void) => { render: (width: number) => string[]; invalidate: () => void; handleInput: (data: string) => void }): Promise<T>;
 			theme: {
 				fg(color: string, text: string): string;
-				dim(text: string): string;
+				dim?(text: string): string;
 				bold(text: string): string;
 				accent(text: string): string;
 				warning(text: string): string;

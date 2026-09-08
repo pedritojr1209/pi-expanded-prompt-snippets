@@ -36,6 +36,12 @@ const extensionDir = dirname(fileURLToPath(import.meta.url));
 const snippetsDir = join(extensionDir, "snippets");
 const WIDGET_ID = "prompt-snippets";
 
+const dimText = (theme: any, text: string): string => {
+	if (typeof theme?.dim === "function") return theme.dim(text);
+	if (typeof theme?.fg === "function") return theme.fg("muted", text);
+	return `\x1b[2m${text}\x1b[22m`;
+};
+
 export default function (pi: ExtensionAPI) {
 	let snippets: Snippet[] = [];
 	let enabled = new Set<string>();
@@ -101,7 +107,7 @@ export default function (pi: ExtensionAPI) {
 				const checkbox = row.enabled ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
 				const namePart = `${pointer}${indent}${branchPrefix}${checkbox} ${theme.bold(node.name)}`;
 				const badgeText = `[#${order} · ${placement}]`;
-				const dimmedBadge = theme.dim(badgeText);
+				const dimmedBadge = dimText(theme,badgeText);
 				const maxNameLen = width - badgeText.length;
 				const displayName = maxNameLen > 0 ? truncateToWidth(namePart, maxNameLen) : "";
 				const padding = Math.max(0, width - displayName.length - badgeText.length);
@@ -136,7 +142,7 @@ export default function (pi: ExtensionAPI) {
 						const firstLine = snippet.body.split("\n")[0] ?? "";
 						const bodyWidth = Math.max(0, width - 4);
 						for (const wrapped of wrapTextWithAnsi(firstLine, bodyWidth)) {
-							rows.push(truncateToWidth("    " + theme.dim(wrapped), width));
+							rows.push(truncateToWidth("    " + dimText(theme,wrapped), width));
 						}
 						rows.push("");
 						index++;
@@ -156,7 +162,7 @@ export default function (pi: ExtensionAPI) {
 						const firstLine = snippet.body.split("\n")[0] ?? "";
 						const bodyWidth = Math.max(0, width - 4);
 						for (const wrapped of wrapTextWithAnsi(firstLine, bodyWidth)) {
-							rows.push(truncateToWidth("    " + theme.dim(wrapped), width));
+							rows.push(truncateToWidth("    " + dimText(theme,wrapped), width));
 						}
 						rows.push("");
 						index++;
