@@ -300,4 +300,99 @@ Additional context.`,
 			}
 		}
 	});
+
+	it("renders order badges next to snippet names in tree view", async () => {
+		vi.resetModules();
+		const mod = await import("../index.js");
+		const pi = makePi();
+		mod.default(pi as any);
+
+		const openMenuHandler = (pi.registerShortcut as any).mock.calls.find(
+			(c: any[]) => c[0] === "alt+s",
+		)?.[1]?.handler;
+		expect(openMenuHandler).toBeDefined();
+
+		const width = 80;
+		let rendererObj: any;
+		const ctx = makeCtx();
+
+		(ctx.ui.custom as any).mockImplementation((rendererFn: any) => {
+			const tui = { requestRender: vi.fn(), terminal: { rows: 24 } };
+			const theme = {
+				fg: (_c: string, text: string) => text,
+				dim: (text: string) => text,
+				bold: (text: string) => text,
+				accent: (text: string) => text,
+				warning: (text: string) => text,
+				success: (text: string) => text,
+			};
+			const keybindings = {};
+			rendererObj = rendererFn(tui, theme, keybindings, () => {});
+			return Promise.resolve(false);
+		});
+
+		await openMenuHandler(ctx);
+
+		const contentRows = (rendererObj.render(width) as string[]).slice(3, -3);
+
+		const snippetRows = contentRows.filter((r: string) =>
+			!r.includes("▾") && !r.includes("▸") && !r.includes("↑") && !r.includes("↓") && r.trim().length > 0,
+		);
+		expect(snippetRows.length).toBeGreaterThan(0);
+
+		for (const row of snippetRows) {
+			expect(row).toMatch(/\[\#\d+ \· (prepend|append)\]/);
+		}
+	});
+
+	it("toggles composed preview mode with p key and verifies ordered content", async () => {
+		vi.resetModules();
+		const mod = await import("../index.js");
+		const pi = makePi();
+		mod.default(pi as any);
+
+		const openMenuHandler = (pi.registerShortcut as any).mock.calls.find(
+			(c: any[]) => c[0] === "alt+s",
+		)?.[1]?.handler;
+		expect(openMenuHandler).toBeDefined();
+
+		const width = 80;
+		let rendererObj: any;
+		const ctx = makeCtx();
+
+		(ctx.ui.custom as any).mockImplementation((rendererFn: any) => {
+			const tui = { requestRender: vi.fn(), terminal: { rows: 24 } };
+			const theme = {
+				fg: (_c: string, text: string) => text,
+				dim: (text: string) => text,
+				bold: (text: string) => text,
+				accent: (text: string) => text,
+				warning: (text: string) => text,
+				success: (text: string) => text,
+			};
+			const keybindings = {};
+			rendererObj = rendererFn(tui, theme, keybindings, () => {});
+			return Promise.resolve(false);
+		});
+
+		await openMenuHandler(ctx);
+
+		rendererObj.handleInput("down");
+		rendererObj.handleInput(" ");
+		rendererObj.handleInput("down");
+		rendererObj.handleInput(" ");
+
+		rendererObj.handleInput("p");
+
+		const rows = rendererObj.render(width);
+		const contentRows = rows.slice(3, -3);
+		const content = contentRows.join("\n");
+
+		expect(rows[1]).toContain("Composed Prompt Preview (Order Verified)");
+		expect(content).toContain("[PREPEND]");
+		expect(content).toContain("1. [10] session-kickoff");
+		expect(content).toContain("[USER MESSAGE]");
+		expect(content).toContain("[APPEND]");
+		expect(content).toContain("2. [10] ask-questions");
+	});
 });

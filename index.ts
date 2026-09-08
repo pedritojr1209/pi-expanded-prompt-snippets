@@ -95,8 +95,17 @@ export default function (pi: ExtensionAPI) {
 					return truncateToWidth(`${pointer}${indent}${branchPrefix}${arrow} ${checked} ${theme.bold(node.name)}`, width);
 				}
 
+				const snippet = snippets.find((s) => s.id === node.id);
+				const order = snippet?.order ?? 9999;
+				const placement = snippet?.placement ?? "append";
 				const checkbox = row.enabled ? theme.fg("success", "[x]") : theme.fg("dim", "[ ]");
-				return truncateToWidth(`${pointer}${indent}${branchPrefix}${checkbox} ${theme.bold(node.name)}`, width);
+				const namePart = `${pointer}${indent}${branchPrefix}${checkbox} ${theme.bold(node.name)}`;
+				const badgeText = `[#${order} · ${placement}]`;
+				const dimmedBadge = theme.dim(badgeText);
+				const maxNameLen = width - badgeText.length;
+				const displayName = maxNameLen > 0 ? truncateToWidth(namePart, maxNameLen) : "";
+				const padding = Math.max(0, width - displayName.length - badgeText.length);
+				return truncateToWidth(displayName + " ".repeat(padding) + dimmedBadge, width);
 			};
 
 			const buildRows = (width: number): string[] => {
@@ -104,16 +113,56 @@ export default function (pi: ExtensionAPI) {
 				return visible.map((r, i) => rowText(r, i, width));
 			};
 
-			const buildPreviewRows = (snippet: Snippet, width: number): string[] => {
+			const buildComposedPreviewRows = (width: number): string[] => {
+				const active = snippets.filter((s) => state.enabled.has(s.id));
+				const prepends = active
+					.filter((s) => s.placement === "prepend")
+					.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+				const appends = active
+					.filter((s) => s.placement === "append")
+					.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+
+				if (prepends.length === 0 && appends.length === 0) {
+					return ["No active snippets"];
+				}
+
 				const rows: string[] = [];
-				rows.push(truncateToWidth(theme.bold(snippet.name), width));
-				rows.push(truncateToWidth(theme.fg("dim", `${snippet.placement} · order ${snippet.order} · ${snippet.id}`), width));
-				rows.push(theme.fg("dim", "─".repeat(Math.min(width, 40))));
-				for (const line of snippet.body.split("\n")) {
-					for (const wrapped of wrapTextWithAnsi(line, width)) {
-						rows.push(truncateToWidth(wrapped, width));
+				let index = 1;
+
+				if (prepends.length > 0) {
+					rows.push(theme.bold("[PREPEND]"));
+					for (const snippet of prepends) {
+						rows.push(truncateToWidth(`${index}. [${snippet.order}] ${snippet.id}`, width));
+						const firstLine = snippet.body.split("\n")[0] ?? "";
+						const bodyWidth = Math.max(0, width - 4);
+						for (const wrapped of wrapTextWithAnsi(firstLine, bodyWidth)) {
+							rows.push(truncateToWidth("    " + theme.dim(wrapped), width));
+						}
+						rows.push("");
+						index++;
 					}
 				}
+
+				const userMsgLabel = " [USER MESSAGE] ";
+				const totalDashLen = Math.max(3, width - userMsgLabel.length);
+				const leftDashLen = Math.floor(totalDashLen / 2);
+				const rightDashLen = totalDashLen - leftDashLen;
+				rows.push(theme.fg("dim", "─".repeat(leftDashLen) + userMsgLabel + "─".repeat(rightDashLen)));
+
+				if (appends.length > 0) {
+					rows.push(theme.bold("[APPEND]"));
+					for (const snippet of appends) {
+						rows.push(truncateToWidth(`${index}. [${snippet.order}] ${snippet.id}`, width));
+						const firstLine = snippet.body.split("\n")[0] ?? "";
+						const bodyWidth = Math.max(0, width - 4);
+						for (const wrapped of wrapTextWithAnsi(firstLine, bodyWidth)) {
+							rows.push(truncateToWidth("    " + theme.dim(wrapped), width));
+						}
+						rows.push("");
+						index++;
+					}
+				}
+
 				return rows;
 			};
 
@@ -147,8 +196,7 @@ export default function (pi: ExtensionAPI) {
 				};
 			};
 
-			let mode: "list" | "preview" = "list";
-			let previewSnippet: Snippet | null = null;
+			let mode: "tree" | "preview" = "tree";
 
 			return {
 				render(width: number): string[] {
@@ -157,31 +205,19 @@ export default function (pi: ExtensionAPI) {
 					let content: string[];
 					let title: string;
 					let hints: string;
-					if (mode === "list") {
+					if (mode === "tree") {
 						const rows = buildRows(width);
 						const v = viewport(rows, 0, maxView, state.cursor);
 						content = v.out;
 						title = "Prompt snippets";
-						hints = "↑↓ navigate • Space toggle • ←→ collapse/expand • Enter apply • Esc cancel";
+						hints = "↑↓ navigate • Space toggle • ←→ collapse/expand • p preview • Enter apply • Esc cancel";
 					} else {
-						if (!previewSnippet) {
-							const visible = getVisibleRows(tree, state);
-							const row = visible[state.cursor];
-							if (row && row.node.type === "snippet") {
-								previewSnippet = snippets.find((s) => s.id === row.node.id) ?? null;
-							} else if (row && row.node.type === "folder") {
-								const folderNode = row.node;
-								if (folderNode.mainSnippetId) {
-									previewSnippet = snippets.find((s) => s.id === folderNode.mainSnippetId) ?? null;
-								}
-							}
-						}
-						const previewRows = previewSnippet ? buildPreviewRows(previewSnippet, width) : ["No snippet selected"];
+						const previewRows = buildComposedPreviewRows(width);
 						const v = viewport(previewRows, previewScroll, maxView);
 						content = v.out;
 						previewScroll = v.scroll;
-						title = previewSnippet ? `Preview: ${previewSnippet.name}` : "Preview";
-						hints = "↑↓ scroll • Tab/Esc back";
+						title = "Composed Prompt Preview (Order Verified)";
+						hints = "p or Esc back to tree • ↑↓ scroll • Enter apply selection";
 					}
 
 					return [
@@ -196,24 +232,21 @@ export default function (pi: ExtensionAPI) {
 				},
 				invalidate() {},
 				handleInput(data: string) {
-					if (mode === "list") {
+					if (mode === "tree") {
 						if (matchesKey(data, Key.up)) {
 							state = moveCursor(tree, state, "up");
-							previewSnippet = null;
 							tui.requestRender();
 						} else if (matchesKey(data, Key.down)) {
 							state = moveCursor(tree, state, "down");
-							previewSnippet = null;
 							tui.requestRender();
-					} else if (matchesKey(data, Key.space)) {
-						const visible = getVisibleRows(tree, state);
-						const row = visible[state.cursor];
-						if (row) {
-							state = toggleSelection(tree, state, row.node.id);
-						}
-						previewSnippet = null;
-						tui.requestRender();
-					} else if (matchesKey(data, Key.left)) {
+						} else if (matchesKey(data, Key.space)) {
+							const visible = getVisibleRows(tree, state);
+							const row = visible[state.cursor];
+							if (row) {
+								state = toggleSelection(tree, state, row.node.id);
+							}
+							tui.requestRender();
+						} else if (matchesKey(data, Key.left)) {
 							const visible = getVisibleRows(tree, state);
 							const row = visible[state.cursor];
 							if (row && row.node.type === "folder" && row.expanded) {
@@ -227,10 +260,9 @@ export default function (pi: ExtensionAPI) {
 								state = toggleExpandCollapse(tree, state, row.node.id);
 							}
 							tui.requestRender();
-						} else if (matchesKey(data, Key.tab)) {
+						} else if (matchesKey(data, "p")) {
 							mode = "preview";
 							previewScroll = 0;
-							previewSnippet = null;
 							tui.requestRender();
 						} else if (matchesKey(data, Key.enter)) {
 							done(true);
@@ -244,9 +276,11 @@ export default function (pi: ExtensionAPI) {
 						} else if (matchesKey(data, Key.down)) {
 							previewScroll++;
 							tui.requestRender();
-						} else if (matchesKey(data, Key.tab) || matchesKey(data, Key.escape)) {
-							mode = "list";
+						} else if (matchesKey(data, "p") || matchesKey(data, Key.escape)) {
+							mode = "tree";
 							tui.requestRender();
+						} else if (matchesKey(data, Key.enter)) {
+							done(true);
 						}
 					}
 				},
